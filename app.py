@@ -1,10 +1,22 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from starlette.status import HTTP_401_UNAUTHORIZED
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from decouple import config
 import google.generativeai as genai
 
 # Configurações
+api_token = config("API_TOKEN")
+
+def validar_token(request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Token ausente ou inválido")
+    
+    token = auth_header.split("Bearer ")[1]
+    if token != api_token:
+        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Token incorreto")
+    
 debug = config("DEBUG", cast=bool, default=True)
 api_key = config("GEMINI_API_KEY")
 
@@ -42,11 +54,13 @@ Itens a organizar: [{lista_formatada}]
 
 # Rota para organizar os itens
 @app.post("/organizar-lista")
-async def organizar_lista(data: ItemList):
+async def organizar_lista(data: ItemList, request: Request):
+    validar_token(request)
     try:
         prompt = montar_prompt(data.itens)
         response = model.generate_content(prompt)
         return {"resultado": response.text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
